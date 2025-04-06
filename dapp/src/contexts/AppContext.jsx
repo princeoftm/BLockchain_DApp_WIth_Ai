@@ -10,82 +10,46 @@ export const AppProvider = ({ children }) => {
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
 
-  const connectToMetaMask = async () => {
+  const connectWallet = async () => {
     try {
       setConnecting(true);
-
-      if (!window.ethereum) {
-        toast.error("MetaMask is not installed!");
-        setConnecting(false);
-        return;
+      if (window.ethereum) {
+        const web3Instance = new Web3(window.ethereum);
+        await window.ethereum.request({ method: "eth_requestAccounts" });
+        const accounts = await web3Instance.eth.getAccounts();
+        setWeb3(web3Instance);
+        setAccount(accounts[0]);
+        setConnected(true);
+        toast.success("Wallet connected!");
+      } else {
+        toast.error("Please install MetaMask!");
       }
-
-      const web3Instance = new Web3(window.ethereum);
-
-      // Request accounts
-      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-      const selectedAccount = accounts[0];
-
-      setWeb3(web3Instance);
-      setAccount(selectedAccount);
-      setConnected(true);
-      toast.success("Connected to MetaMask!");
     } catch (error) {
       console.error(error);
-      toast.error("Failed to connect MetaMask!");
+      toast.error("Connection failed");
     } finally {
       setConnecting(false);
     }
   };
 
-  const checkIfWalletIsConnected = async () => {
-    if (!window.ethereum) return;
-
-    try {
-      const accounts = await window.ethereum.request({ method: "eth_accounts" });
-      if (accounts.length > 0) {
-        setWeb3(new Web3(window.ethereum));
-        setAccount(accounts[0]);
-        setConnected(true);
-      }
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
+  // Auto connect if already authorized
   useEffect(() => {
-    checkIfWalletIsConnected();
-
-    // Listen for account changes
-    if (window.ethereum) {
-      window.ethereum.on("accountsChanged", (accounts) => {
+    const autoConnect = async () => {
+      if (window.ethereum) {
+        const web3Instance = new Web3(window.ethereum);
+        const accounts = await web3Instance.eth.getAccounts();
         if (accounts.length > 0) {
+          setWeb3(web3Instance);
           setAccount(accounts[0]);
           setConnected(true);
-          toast("Account changed!");
-        } else {
-          // No account connected
-          setAccount(null);
-          setConnected(false);
         }
-      });
-
-      window.ethereum.on("chainChanged", () => {
-        window.location.reload();
-      });
-    }
+      }
+    };
+    autoConnect();
   }, []);
 
   return (
-    <AppContext.Provider
-      value={{
-        web3,
-        account,
-        connected,
-        connecting,
-        connectToMetaMask,
-      }}
-    >
+    <AppContext.Provider value={{ web3, account, connected, connecting, connectWallet }}>
       {children}
     </AppContext.Provider>
   );

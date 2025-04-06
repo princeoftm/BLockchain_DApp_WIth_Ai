@@ -1,163 +1,103 @@
+// Home.jsx
 import React, { useEffect, useRef, useState } from "react";
-import styles from "./home.module.css";
+import { abi as taskAbi } from "../Utils/constant";
 import { useAppContext } from "../contexts/AppContext";
 import toast from "react-hot-toast";
 
-const Home = () => {
-  const { web3, account, connectToMetaMask, connected, connecting } = useAppContext();
-  const inputRef = useRef(null);
+const CONTRACT_ADDRESS = "0x4009f1897533df52CC825da24Cc5F2d423537ae3";
 
+export default function Home() {
+  const { web3, account, connectWallet, connected, connecting } = useAppContext();
+  const inputRef = useRef();
   const [isLoading, setIsLoading] = useState("idle");
   const [tasks, setTasks] = useState([]);
 
-  // Fetch tasks from the smart contract
-  const getTasks = async () => {
-    if (!web3 || !account) return;
-
+  const fetchTasks = async () => {
+    if (!connected) return;
+    setIsLoading("fetching");
     try {
-      setIsLoading("fetching");
-      const taskContract = new web3.eth.Contract(
-        [/* Contract ABI goes here */],
-        "your_contract_address_here"
-      );
-      const fetchedTasks = await taskContract.methods.getMyTasks().call({ from: account });
-      setTasks(fetchedTasks);
-    } catch (error) {
-      console.error(error);
-      toast.error("Error fetching tasks");
+      const taskContract = new web3.eth.Contract(taskAbi, CONTRACT_ADDRESS);
+      const myTasks = await taskContract.methods.getMyTasks().call({ from: account });
+      setTasks(myTasks);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to fetch tasks");
     } finally {
       setIsLoading("idle");
     }
   };
 
-  // Add new task
-  const handleAddTask = async (e) => {
+  const addTask = async (text) => {
+    setIsLoading("adding");
+    try {
+      const taskContract = new web3.eth.Contract(taskAbi, CONTRACT_ADDRESS);
+      await taskContract.methods.addTask(text, false).send({ from: account });
+      toast.success("Task added!");
+      return true;
+    } catch {
+      toast.error("Failed to add task");
+      return false;
+    } finally {
+      setIsLoading("idle");
+    }
+  };
+
+  const deleteTask = async (id) => {
+    setIsLoading("deleting");
+    try {
+      const taskContract = new web3.eth.Contract(taskAbi, CONTRACT_ADDRESS);
+      await taskContract.methods.deleteTask(id, true).send({ from: account });
+      toast.success("Task deleted!");
+      await fetchTasks();
+    } catch {
+      toast.error("Failed to delete task");
+    } finally {
+      setIsLoading("idle");
+    }
+  };
+
+  const handleAdd = async (e) => {
     e.preventDefault();
-    const taskText = inputRef.current?.value.trim();
-
-    if (!taskText) {
-      toast.error("Please enter a task");
-      return;
-    }
-
-    if (!account) {
-      toast.error("Connect to wallet first");
-      return;
-    }
-
-    try {
-      setIsLoading("adding");
-
-      const taskContract = new web3.eth.Contract(
-        [/* Contract ABI goes here */],
-        "your_contract_address_here"
-      );
-
-      await taskContract.methods
-        .addTask(taskText, false)
-        .send({ from: account, gas: 3000000 })
-        .on("receipt", () => {
-          inputRef.current.value = "";
-          getTasks();
-          toast.success("Task added successfully");
-        });
-    } catch (error) {
-      console.error(error);
-      toast.error("Error adding task");
-    } finally {
-      setIsLoading("idle");
+    const val = inputRef.current.value.trim();
+    if (!val) return;
+    const ok = await addTask(val);
+    if (ok) {
+      inputRef.current.value = "";
+      fetchTasks();
     }
   };
 
-  // Delete (mark) a task
-  const handleDeleteTask = async (taskId) => {
-    if (!account) {
-      toast.error("Connect to wallet first");
-      return;
-    }
-
-    try {
-      setIsLoading("deleting");
-
-      const taskContract = new web3.eth.Contract(
-        [/* Contract ABI goes here */],
-        "your_contract_address_here"
-      );
-
-      await taskContract.methods
-        .deleteTask(taskId, true)
-        .send({ from: account, gas: 3000000 })
-        .on("receipt", () => {
-          getTasks();
-          toast.success("Task deleted successfully");
-        });
-    } catch (error) {
-      console.error(error);
-      toast.error("Error deleting task");
-    } finally {
-      setIsLoading("idle");
-    }
-  };
-
-  // Fetch tasks after connecting
   useEffect(() => {
-    if (connected) {
-      getTasks();
-    }
+    if (connected) fetchTasks();
   }, [connected]);
 
   return (
-    <section className={styles.home}>
-      <div className={styles.wallet}>
-        {!connected ? (
-          <button onClick={connectToMetaMask} disabled={connecting}>
-            {connecting ? "Connecting..." : "Connect to MetaMask"}
-          </button>
-        ) : (
-          <p>Connected as: {account}</p>
-        )}
-      </div>
+    <div>
+      {!connected ? (
+        <button onClick={connectWallet} disabled={connecting}>
+          {connecting ? "Connecting..." : "Connect Wallet"}
+        </button>
+      ) : (
+        <p>Connected: {account}</p>
+      )}
 
-      <div className={styles.tasks}>
-        {isLoading === "fetching" ? (
-          <p>Loading tasks...</p>
-        ) : tasks.length > 0 ? (
-          tasks.map((task) => (
-            <div key={task.id} className={styles.task}>
-              <p>
-                Task: <span>{task.taskText}</span>
-              </p>
-              <button
-                onClick={() => handleDeleteTask(task.id)}
-                disabled={isLoading === "deleting"}
-              >
-                {isLoading === "deleting" ? "Deleting..." : "Delete"}
-              </button>
-            </div>
-          ))
-        ) : (
-          <p>No tasks found</p>
-        )}
-      </div>
+      <form onSubmit={handleAdd}>
+        <input ref={inputRef} placeholder="Enter task" disabled={isLoading !== "idle"} />
+        <button type="submit">Add</button>
+      </form>
 
-      <div className={styles.form}>
-        <form onSubmit={handleAddTask}>
-          <input
-            type="text"
-            placeholder="Enter new task"
-            ref={inputRef}
-            disabled={!connected || isLoading === "adding"}
-          />
-          <button
-            type="submit"
-            disabled={!connected || isLoading === "adding"}
-          >
-            {isLoading === "adding" ? "Adding..." : "Add Task"}
-          </button>
-        </form>
-      </div>
-    </section>
+      {isLoading === "fetching" ? (
+        <p>Loading...</p>
+      ) : tasks.length ? (
+        tasks.map((task) => (
+          <div key={task.id}>
+            <span>{task.taskText}</span>
+            <button onClick={() => deleteTask(task.id)}>Delete</button>
+          </div>
+        ))
+      ) : (
+        <p>No tasks</p>
+      )}
+    </div>
   );
-};
-
-export default Home;
+}
