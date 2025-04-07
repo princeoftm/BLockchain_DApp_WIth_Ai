@@ -1,6 +1,6 @@
+// src/contexts/AppContext.jsx
 import React, { createContext, useContext, useEffect, useState } from "react";
 import Web3 from "web3";
-import toast from "react-hot-toast";
 
 const AppContext = createContext();
 
@@ -10,7 +10,7 @@ export const AppProvider = ({ children }) => {
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
 
-  const connectWallet = async () => {
+  const connectToMetaMask = async () => {
     try {
       setConnecting(true);
       if (window.ethereum) {
@@ -20,36 +20,39 @@ export const AppProvider = ({ children }) => {
         setWeb3(web3Instance);
         setAccount(accounts[0]);
         setConnected(true);
-        toast.success("Wallet connected!");
       } else {
-        toast.error("Please install MetaMask!");
+        alert("Please install MetaMask!");
       }
     } catch (error) {
-      console.error(error);
-      toast.error("Connection failed");
+      console.error("Connection Error:", error);
+      alert("Failed to connect MetaMask");
     } finally {
       setConnecting(false);
     }
   };
 
-  // Auto connect if already authorized
+  // Handle account/network change
   useEffect(() => {
-    const autoConnect = async () => {
-      if (window.ethereum) {
-        const web3Instance = new Web3(window.ethereum);
-        const accounts = await web3Instance.eth.getAccounts();
-        if (accounts.length > 0) {
-          setWeb3(web3Instance);
-          setAccount(accounts[0]);
-          setConnected(true);
-        }
-      }
-    };
-    autoConnect();
+    if (window.ethereum) {
+      window.ethereum.on("accountsChanged", () => {
+        window.location.reload();
+      });
+      window.ethereum.on("chainChanged", () => {
+        window.location.reload();
+      });
+    }
   }, []);
 
   return (
-    <AppContext.Provider value={{ web3, account, connected, connecting, connectWallet }}>
+    <AppContext.Provider
+      value={{
+        web3,
+        account,
+        connectToMetaMask,
+        connected,
+        connecting,
+      }}
+    >
       {children}
     </AppContext.Provider>
   );
